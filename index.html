@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта добрых спраў</title>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Commissioner', system-ui, sans-serif; background: #F4F7F6; overflow: hidden; }
+        #map { width: 100vw; height: 100vh; filter: saturate(0.85) brightness(1.05); }
+        .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); }
+        .header { position: absolute; top: 20px; left: 20px; z-index: 1000; display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-radius: 20px; font-size: 24px; font-weight: 700; color: #2c3e50; }
+        .header-right { position: absolute; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 12px; }
+        .auth-btn { padding: 12px 24px; border-radius: 16px; border: none; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; font-size: 14px; }
+        .auth-btn.login { background: white; color: #2c3e50; border: 2px solid #2c3e50; }
+        .auth-btn.login:hover { background: #2c3e50; color: white; }
+        .auth-btn.admin { background: linear-gradient(135deg, #9B59B6 0%, #8E44AD 100%); color: white; box-shadow: 0 4px 12px rgba(155, 89, 182, 0.3); }
+        .auth-btn.admin:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(155, 89, 182, 0.4); }
+        .user-menu { background: white; padding: 12px 20px; border-radius: 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; }
+        .user-name { font-size: 14px; font-weight: 600; color: #2c3e50; }
+        .logout-btn { background: none; border: none; color: #95a5a6; cursor: pointer; font-size: 20px; padding: 4px; }
+        .logout-btn:hover { color: #e74c3c; }
+        .admin-tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #f0f0f0; padding: 4px; border-radius: 12px; }
+        .admin-tab { flex: 1; padding: 12px; background: transparent; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .admin-tab.active { background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .admin-content { display: none; }
+        .admin-content.active { display: block; }
+        .deed-item { border: 2px solid #e0e0e0; border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+        .deed-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .deed-actions .btn { padding: 8px 16px; font-size: 14px; }
+        .filter-panel { position: absolute; top: 120px; left: 20px; z-index: 1000; border-radius: 24px; padding: 24px; min-width: 260px; }
+        .filter-title { font-size: 18px; font-weight: 600; color: #2c3e50; margin-bottom: 20px; }
+        .category-btn { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 20px; margin-bottom: 12px; cursor: pointer; border: 2.5px solid #2c3e50; background: white; width: 100%; font-family: inherit; font-size: 16px; transition: all 0.3s; }
+        .category-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); }
+        .category-btn.active { background: #2c3e50; color: white; }
+        .add-btn { position: absolute; bottom: 40px; right: 40px; z-index: 1000; width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%); border: none; color: white; font-size: 32px; cursor: pointer; box-shadow: 0 8px 24px rgba(46, 204, 113, 0.4); transition: transform 0.3s; }
+        .add-btn:hover { transform: scale(1.1); }
+        .custom-marker { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); position: relative; }
+        .marker-badge { position: absolute; top: -4px; right: -4px; width: 20px; height: 20px; background: #e74c3c; border-radius: 50%; font-size: 11px; color: white; font-weight: 700; border: 2px solid white; display: flex; align-items: center; justify-content: center; }
+        .leaflet-popup-content-wrapper { border-radius: 16px; padding: 0; }
+        .popup-body { padding: 16px; }
+        .popup-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: 24px; padding: 32px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .auth-tabs { display: flex; gap: 8px; margin-bottom: 24px; background: #f0f0f0; padding: 4px; border-radius: 12px; }
+        .auth-tab { flex: 1; padding: 12px; background: transparent; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .auth-tab.active { background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .auth-form { display: none; }
+        .auth-form.active { display: block; }
+        .error-message { background: #fee; border: 1px solid #fcc; color: #c33; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+        .success-message { background: #efe; border: 1px solid #cfc; color: #3c3; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+        .map-picker-btn { width: 100%; padding: 12px; border: 2px dashed #2ECC71; border-radius: 12px; background: rgba(46, 204, 113, 0.05); color: #2ECC71; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .map-picker-btn:hover { background: rgba(46, 204, 113, 0.1); border-color: #27AE60; }
+        .map-picker-btn.selected { border-color: #27AE60; background: rgba(46, 204, 113, 0.15); }
+        .map-picker-overlay { display: none; position: fixed; inset: 0; background: white; z-index: 3000; flex-direction: column; }
+        .map-picker-overlay.active { display: flex; }
+        .map-picker-header { padding: 20px; background: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center; }
+        .map-picker-map { flex: 1; position: relative; }
+        #mapPicker { width: 100%; height: 100%; }
+        .map-picker-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; background: #2ECC71; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4); pointer-events: none; z-index: 400; }
+        .map-picker-info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 16px 24px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 401; text-align: center; }
+        .map-picker-coords { font-size: 14px; color: #666; margin-bottom: 8px; }
+        .coords-display { display: inline-block; padding: 4px 12px; background: #f0f0f0; border-radius: 8px; margin-top: 8px; font-size: 12px; color: #666; }
+        
+        /* Мобильная версия */
+        @media (max-width: 768px) {
+            .header {
+                top: 10px;
+                left: 10px;
+                padding: 12px 16px;
+                font-size: 18px;
+                max-width: calc(100% - 100px);
+            }
+            
+            .header span:last-child {
+                display: none;
+            }
+            
+            .header-right {
+                top: 10px;
+                right: 10px;
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .auth-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .user-menu {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .user-name {
+                display: none;
+            }
+            
+            .filter-panel {
+                position: fixed;
+                top: auto;
+                bottom: 80px;
+                left: 0;
+                right: 0;
+                z-index: 1000;
+                border-radius: 24px 24px 0 0;
+                padding: 16px;
+                max-height: 50vh;
+                overflow-y: auto;
+                transform: translateY(calc(100% + 80px));
+                transition: transform 0.3s ease;
+            }
+            
+            .filter-panel.open {
+                transform: translateY(0);
+            }
+            
+            .filter-toggle {
+                display: flex;
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                z-index: 999;
+                width: 56px;
+                height: 56px;
+                border-radius: 50%;
+                background: white;
+                border: 2px solid #2c3e50;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+            
+            .add-btn {
+                bottom: 20px;
+                right: 20px;
+                width: 56px;
+                height: 56px;
+                font-size: 28px;
+            }
+            
+            .filter-title {
+                font-size: 16px;
+                margin-bottom: 12px;
+            }
+            
+            .category-btn {
+                padding: 12px 16px;
+                font-size: 14px;
+                margin-bottom: 8px;
+            }
+            
+            .modal-content {
+                max-width: 95%;
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .deed-item {
+                padding: 12px;
+            }
+            
+            .deed-actions {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .deed-actions .btn {
+                width: 100%;
+            }
+            
+            .leaflet-popup-content-wrapper {
+                max-width: 90vw;
+            }
+            
+            .popup-body {
+                font-size: 12px;
+            }
+            
+            .popup-title {
+                font-size: 14px;
+            }
+        }
+        
+        .filter-toggle {
+            display: none;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-label { display: block; font-weight: 600; margin-bottom: 8px; }
+        .form-input, .form-textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 12px; font-family: inherit; }
+        .form-textarea { min-height: 100px; resize: vertical; }
+        .btn { padding: 14px 28px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+        .btn-primary { background: #2ECC71; color: white; width: 100%; }
+        .btn-primary:hover { background: #27AE60; transform: translateY(-2px); }
+        .loading { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.9); display: flex; align-items: center; justify-content: center; z-index: 3000; font-size: 24px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="header glass"><span style="font-size: 32px;">🤝</span><span>Карта добрых спраў</span></div>
+    
+    <button class="filter-toggle glass" id="filterToggle" onclick="toggleFilters()">
+        🔽
+    </button>
+    
+    <div class="header-right">
+        <div id="authButtons" style="display: none;">
+            <button class="auth-btn login glass" onclick="openAuthModal()">Войти</button>
+        </div>
+        <div id="userMenu" style="display: none;">
+            <button class="auth-btn login glass" onclick="openProfileModal()" style="margin-right: 12px;">
+                👤 Личный кабинет
+            </button>
+            <div class="user-menu">
+                <div class="user-avatar" id="userAvatar"></div>
+                <div class="user-name" id="userName"></div>
+                <button class="logout-btn" onclick="logout()" title="Выйти">⏻</button>
+            </div>
+        </div>
+        <button id="adminBtn" class="auth-btn admin glass" onclick="openAdminPanel()" style="display: none;">
+            👑 Админ-панель
+        </button>
+    </div>
+    
+    <div class="filter-panel glass" id="filterPanel">
+        <div class="filter-title">Категории</div>
+        <div id="categories"></div>
+    </div>
+    
+    <button class="add-btn" onclick="openModal()">+</button>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2>Добавить доброе дело</h2>
+            <form id="deedForm" onsubmit="submitDeed(event)">
+                <div class="form-group"><label class="form-label">Название</label><input type="text" class="form-input" name="title" required></div>
+                <div class="form-group"><label class="form-label">Описание</label><textarea class="form-textarea" name="description" required></textarea></div>
+                <div class="form-group"><label class="form-label">Категория</label><select class="form-input" name="category" required><option value="">Выберите категорию</option><option value="ecology">🌱 Экология</option><option value="animals">🐾 Животные</option><option value="elderly">👴 Пожилые люди</option><option value="children">👶 Дети</option><option value="other">💫 Другое</option></select></div>
+                <div class="form-group">
+                    <label class="form-label">Местоположение</label>
+                    <button type="button" class="map-picker-btn" id="pickLocationBtn" onclick="openMapPicker()">
+                        <span id="locationBtnText">📍 Выбрать на карте</span>
+                    </button>
+                    <div id="coordsDisplay" class="coords-display" style="display: none; margin-top: 8px;"></div>
+                    <input type="hidden" name="lat" id="selectedLat">
+                    <input type="hidden" name="lng" id="selectedLng">
+                </div>
+                <div class="form-group"><label class="form-label">Адрес</label><input type="text" class="form-input" name="address" id="addressInput" required></div>
+                <div class="form-group"><label class="form-label">Ваше имя</label><input type="text" class="form-input" name="contactName" required></div>
+                <div class="form-group"><label class="form-label">Телефон</label><input type="tel" class="form-input" name="contactPhone" placeholder="+375..." required></div>
+                <div class="form-group"><label class="form-label">Нужно волонтёров</label><input type="number" class="form-input" name="volunteersNeeded" value="1" min="1" required></div>
+                <div class="form-group"><label class="form-label">Срок (опционально)</label><input type="date" class="form-input" name="deadline"></div>
+                <button type="submit" class="btn btn-primary">Отправить</button>
+                <button type="button" class="btn" onclick="closeModal()" style="margin-top: 10px; background: #95a5a6; color: white; width: 100%;">Отмена</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Авторизация</h2>
+                <button class="modal-close" onclick="closeAuthModal()">×</button>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchAuthTab('login')">Вход</button>
+                <button class="auth-tab" onclick="switchAuthTab('register')">Регистрация</button>
+            </div>
+            
+            <div id="authError" class="error-message" style="display: none;"></div>
+            <div id="authSuccess" class="success-message" style="display: none;"></div>
+            
+            <!-- Форма входа -->
+            <form id="loginForm" class="auth-form active" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Пароль</label>
+                    <input type="password" class="form-input" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Войти</button>
+            </form>
+            
+            <!-- Форма регистрации -->
+            <form id="registerForm" class="auth-form" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label class="form-label">Имя и фамилия</label>
+                    <input type="text" class="form-input" name="fullName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Пароль (минимум 6 символов)</label>
+                    <input type="password" class="form-input" name="password" minlength="6" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Город</label>
+                    <input type="text" class="form-input" name="city" value="Минск" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="adminModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 class="modal-title">👑 Админ-панель</h2>
+                <button class="modal-close" onclick="closeAdminPanel()">×</button>
+            </div>
+            
+            <div class="admin-tabs">
+                <button class="admin-tab active" onclick="switchAdminTab('pending')">На модерации</button>
+                <button class="admin-tab" onclick="switchAdminTab('all')">Все дела</button>
+            </div>
+            
+            <div id="pendingContent" class="admin-content active">
+                <h3 style="margin-bottom: 16px;">Дела на модерации</h3>
+                <div id="pendingDeeds"></div>
+            </div>
+            
+            <div id="allContent" class="admin-content">
+                <h3 style="margin-bottom: 16px;">Все дела на карте</h3>
+                <div id="allDeeds"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="editDeedModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Редактировать дело</h2>
+                <button class="modal-close" onclick="closeEditDeedModal()">×</button>
+            </div>
+            <form id="editDeedForm" onsubmit="updateDeed(event)">
+                <input type="hidden" id="editDeedId" name="deedId">
+                <div class="form-group">
+                    <label class="form-label">Название</label>
+                    <input type="text" class="form-input" id="editTitle" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Описание</label>
+                    <textarea class="form-textarea" id="editDescription" name="description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Категория</label>
+                    <select class="form-input" id="editCategory" name="category" required>
+                        <option value="ecology">🌱 Экология</option>
+                        <option value="animals">🐾 Животные</option>
+                        <option value="elderly">👴 Пожилые люди</option>
+                        <option value="children">👶 Дети</option>
+                        <option value="other">💫 Другое</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Адрес</label>
+                    <input type="text" class="form-input" id="editAddress" name="address" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Контактное лицо</label>
+                    <input type="text" class="form-input" id="editContactName" name="contactName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Телефон</label>
+                    <input type="tel" class="form-input" id="editContactPhone" name="contactPhone" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Нужно волонтёров</label>
+                    <input type="number" class="form-input" id="editVolunteersNeeded" name="volunteersNeeded" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Статус</label>
+                    <select class="form-input" id="editStatus" name="status" required>
+                        <option value="pending">В ожидании</option>
+                        <option value="approved">Одобрено</option>
+                        <option value="active">Активно</option>
+                        <option value="completed">Завершено</option>
+                        <option value="rejected">Отклонено</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                <button type="button" class="btn" onclick="closeEditDeedModal()" style="margin-top: 10px; background: #95a5a6; color: white; width: 100%;">Отмена</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="profileModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title">👤 Личный кабинет</h2>
+                <button class="modal-close" onclick="closeProfileModal()">×</button>
+            </div>
+            
+            <div id="profileContent">
+                <h3 style="margin-bottom: 16px;">Мои отклики</h3>
+                <div id="myDeeds"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="mapPickerOverlay" class="map-picker-overlay">
+        <div class="map-picker-header">
+            <h2 style="margin: 0; font-size: 20px;">📍 Выберите место на карте</h2>
+            <button onclick="closeMapPicker()" style="background: none; border: none; color: white; font-size: 32px; cursor: pointer; line-height: 1;">×</button>
+        </div>
+        <div class="map-picker-map">
+            <div id="mapPicker"></div>
+            <div class="map-picker-crosshair">📍</div>
+            <div class="map-picker-info">
+                <div class="map-picker-coords" id="pickerCoords">Перемещайте карту для выбора точки</div>
+                <button onclick="confirmLocation()" class="btn btn-primary" style="width: auto; padding: 10px 30px;">✓ Подтвердить</button>
+            </div>
+        </div>
+    </div>
+    <div id="loading" class="loading hidden"><div>⏳ Загрузка...</div></div>
+    <script>
+        const SUPABASE_URL = 'https://jjugpxgnibblvtffisfl.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqdWdweGduaWJibHZ0ZmZpc2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MzczMDAsImV4cCI6MjA4NjQxMzMwMH0.6SdXki8mIZp31FVe3iByfOfU3TXzPLYwJzz3a8Aof7Y';
+        var supabase, map, pickerMap;
+        var markers = [];
+        var selectedCategories = [];
+        var selectedLocation = { lat: null, lng: null };
+        var currentUser = null;
+        var userRole = null;
+        const categories = {
+            ecology: { id: 'ecology', name: 'Экология', icon: '🌱', color: '#2ECC71' },
+            animals: { id: 'animals', name: 'Животные', icon: '🐾', color: '#E67E22' },
+            elderly: { id: 'elderly', name: 'Пожилые люди', icon: '👴', color: '#9B59B6' },
+            children: { id: 'children', name: 'Дети', icon: '👶', color: '#3498DB' },
+            other: { id: 'other', name: 'Другое', icon: '💫', color: '#95A5A6' }
+        };
+        const demoDeeds = [{id:1,title:'Уборка парка Челюскинцев',description:'Нужна помощь в уборке территории парка.',category:'ecology',lat:53.9045,lng:27.5615,address:'Парк Челюскинцев, Минск',volunteersNeeded:15,volunteersRegistered:8},{id:2,title:'Помощь приюту для животных',description:'Приюту требуется помощь в уходе за животными.',category:'animals',lat:53.8900,lng:27.5500,address:'ул. Карвата 5, Минск',volunteersNeeded:5,volunteersRegistered:3},{id:3,title:'Помощь пожилым людям',description:'Организуем помощь с покупкой продуктов.',category:'elderly',lat:53.9200,lng:27.5800,address:'Микрорайон Восток, Минск',volunteersNeeded:10,volunteersRegistered:10}];
+        async function init() {
+            // Защита от повторной инициализации
+            if (window.mapInitialized) {
+                console.log('Карта уже инициализирована');
+                return;
+            }
+            window.mapInitialized = true;
+            
+            console.log('Инициализация...');
+            try { 
+                if (window.supabase) { 
+                    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); 
+                    console.log('Supabase подключен');
+                    
+                    // Проверяем текущую сессию
+                    await checkUser();
+                    
+                    // Слушаем изменения авторизации
+                    supabase.auth.onAuthStateChange((event, session) => {
+                        console.log('Auth state changed:', event);
+                        if (session) {
+                            currentUser = session.user;
+                            updateUIForUser();
+                        } else {
+                            currentUser = null;
+                            updateUIForGuest();
+                        }
+                    });
+                } 
+            } catch (e) { 
+                console.warn('Supabase не подключен', e); 
+            }
+            
+            map = L.map('map').setView([53.9045, 27.5615], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OpenStreetMap'}).addTo(map);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            renderCategories();
+            await loadDeeds();
+            console.log('Готово!');
+        }
+        function renderCategories() {
+            const container = document.getElementById('categories');
+            Object.values(categories).forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = 'category-btn';
+                btn.innerHTML = `<span style="font-size: 24px;">${cat.icon}</span><span>${cat.name}</span>`;
+                btn.onclick = () => toggleCategory(cat.id, btn);
+                container.appendChild(btn);
+            });
+        }
+        function toggleCategory(catId, btn) {
+            const index = selectedCategories.indexOf(catId);
+            if (index > -1) { selectedCategories.splice(index, 1); btn.classList.remove('active'); } else { selectedCategories.push(catId); btn.classList.add('active'); }
+            loadDeeds();
+        }
+        async function loadDeeds() {
+            showLoading(true);
+            let deeds = [];
+            try {
+                if (supabase) {
+                    // Используем RPC функцию для получения дел с координатами
+                    const { data, error } = await supabase.rpc('get_deeds_with_coordinates', {
+                        status_filter: ['approved', 'active']
+                    });
+                    
+                    if (data && !error) {
+                        deeds = data.map(d => ({
+                            id: d.id,
+                            title: d.title,
+                            description: d.description,
+                            category: d.category,
+                            lat: parseFloat(d.lat),
+                            lng: parseFloat(d.lng),
+                            address: d.address,
+                            volunteersNeeded: d.volunteers_needed || 1,
+                            volunteersRegistered: d.volunteers_registered || 0,
+                            images: d.images,
+                            deadline: d.deadline
+                        }));
+                        console.log('Загружено дел из Supabase:', deeds.length);
+                        if (deeds.length > 0) {
+                            console.log('Первое дело:', deeds[0]);
+                        }
+                    } else if (error) {
+                        console.error('Ошибка Supabase:', error);
+                    }
+                }
+            } catch (e) { 
+                console.warn('Ошибка загрузки из Supabase:', e); 
+            }
+            
+            if (deeds.length === 0) { 
+                deeds = demoDeeds; 
+                console.log('Используем демо-данные'); 
+            }
+            
+            if (selectedCategories.length > 0) {
+                deeds = deeds.filter(d => selectedCategories.includes(d.category));
+            }
+            
+            updateMarkers(deeds);
+            showLoading(false);
+        }
+        function updateMarkers(deeds) {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            deeds.forEach(deed => {
+                const cat = categories[deed.category];
+                const spotsLeft = deed.volunteersNeeded - deed.volunteersRegistered;
+                const isUrgent = deed.deadline && new Date(deed.deadline) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+                
+                const iconHtml = `<div class="custom-marker ${isUrgent ? 'marker-pulse' : ''}" style="background-color: ${cat.color};">${cat.icon}${spotsLeft > 0 ? `<div class="marker-badge">${spotsLeft}</div>` : ''}</div>`;
+                
+                const marker = L.marker([deed.lat, deed.lng], {
+                    icon: L.divIcon({
+                        html: iconHtml,
+                        className: 'custom-marker-container',
+                        iconSize: [48, 48],
+                        iconAnchor: [24, 24]
+                    })
+                });
+                
+                const deadlineText = deed.deadline 
+                    ? `<p style="font-size: 13px; color: #666;">📅 До: ${new Date(deed.deadline).toLocaleDateString('ru-RU')}</p>`
+                    : '';
+                
+                const popupContent = `
+                    <div class="popup-body">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="font-size: 24px;">${cat.icon}</span>
+                            <span style="background: ${cat.color}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">${cat.name}</span>
+                        </div>
+                        <div class="popup-title">${deed.title}</div>
+                        <p style="font-size: 13px; margin-bottom: 8px;">${deed.description}</p>
+                        <p style="font-size: 13px; color: #666;">📍 ${deed.address}</p>
+                        ${deadlineText}
+                        <p style="font-size: 13px; color: #666; margin-top: 8px;">
+                            👥 ${spotsLeft > 0 ? `Нужно ещё ${spotsLeft} волонтёр${spotsLeft === 1 ? '' : spotsLeft < 5 ? 'а' : 'ов'}` : 'Набор завершён'}
+                        </p>
+                        <div style="margin-top: 12px;">
+                            <button class="popup-volunteer-btn" onclick="volunteerForDeed('${deed.id}')" ${spotsLeft === 0 ? 'disabled' : ''} style="width: 100%; padding: 10px; background: ${spotsLeft === 0 ? '#95a5a6' : '#2ECC71'}; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: ${spotsLeft === 0 ? 'not-allowed' : 'pointer'}; font-family: inherit;">
+                                ${spotsLeft === 0 ? '✓ Набор завершён' : '🙋 Откликнуться'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                marker.bindPopup(popupContent, {
+                    maxWidth: 280,
+                    className: 'custom-popup'
+                });
+                
+                marker.addTo(map);
+                markers.push(marker);
+            });
+        }
+        function openModal() {
+            // Проверяем авторизацию перед открытием формы
+            if (!currentUser) {
+                alert('⚠️ Для создания заявки необходимо войти в систему');
+                openAuthModal();
+                return;
+            }
+            document.getElementById('modal').classList.add('active');
+        }
+        
+        async function checkUser() {
+            if (!supabase) return;
+            
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    currentUser = session.user;
+                    
+                    // Получаем роль пользователя
+                    const { data: userData } = await supabase
+                        .from('users')
+                        .select('role, full_name')
+                        .eq('id', currentUser.id)
+                        .single();
+                    
+                    if (userData) {
+                        userRole = userData.role;
+                        currentUser.full_name = userData.full_name;
+                    }
+                    
+                    updateUIForUser();
+                } else {
+                    updateUIForGuest();
+                }
+            } catch (e) {
+                console.error('Ошибка проверки пользователя:', e);
+                updateUIForGuest();
+            }
+        }
+        
+        function updateUIForUser() {
+            document.getElementById('authButtons').style.display = 'none';
+            document.getElementById('userMenu').style.display = 'block';
+            
+            const userName = currentUser.full_name || currentUser.email.split('@')[0];
+            document.getElementById('userName').textContent = userName;
+            document.getElementById('userAvatar').textContent = userName.charAt(0).toUpperCase();
+            
+            // Показываем кнопку админ-панели для админов
+            if (userRole === 'admin' || userRole === 'moderator') {
+                document.getElementById('adminBtn').style.display = 'block';
+            }
+        }
+        
+        function updateUIForGuest() {
+            document.getElementById('authButtons').style.display = 'block';
+            document.getElementById('userMenu').style.display = 'none';
+            document.getElementById('adminBtn').style.display = 'none';
+        }
+        
+        function openAuthModal() {
+            document.getElementById('authModal').classList.add('active');
+        }
+        
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.remove('active');
+            document.getElementById('authError').style.display = 'none';
+            document.getElementById('authSuccess').style.display = 'none';
+            document.getElementById('loginForm').reset();
+            document.getElementById('registerForm').reset();
+        }
+        
+        function switchAuthTab(tab) {
+            const tabs = document.querySelectorAll('.auth-tab');
+            const forms = document.querySelectorAll('.auth-form');
+            
+            tabs.forEach(t => t.classList.remove('active'));
+            forms.forEach(f => f.classList.remove('active'));
+            
+            if (tab === 'login') {
+                tabs[0].classList.add('active');
+                document.getElementById('loginForm').classList.add('active');
+            } else {
+                tabs[1].classList.add('active');
+                document.getElementById('registerForm').classList.add('active');
+            }
+            
+            document.getElementById('authError').style.display = 'none';
+        }
+        
+        async function handleLogin(e) {
+            e.preventDefault();
+            showLoading(true);
+            
+            const formData = new FormData(e.target);
+            const email = formData.get('email');
+            const password = formData.get('password');
+            
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+                
+                if (error) throw error;
+                
+                console.log('Успешный вход:', data);
+                closeAuthModal();
+                alert('✅ Вы успешно вошли в систему!');
+            } catch (error) {
+                console.error('Ошибка входа:', error);
+                const errorDiv = document.getElementById('authError');
+                errorDiv.textContent = '❌ ' + (error.message || 'Ошибка входа');
+                errorDiv.style.display = 'block';
+            }
+            
+            showLoading(false);
+        }
+        
+        async function handleRegister(e) {
+            e.preventDefault();
+            showLoading(true);
+            
+            const formData = new FormData(e.target);
+            const email = formData.get('email');
+            const password = formData.get('password');
+            const fullName = formData.get('fullName');
+            const city = formData.get('city');
+            
+            try {
+                // Регистрируем пользователя
+                const { data: authData, error: authError } = await supabase.auth.signUp({
+                    email: email,
+                    password: password,
+                    options: {
+                        data: {
+                            full_name: fullName,
+                            city: city
+                        }
+                    }
+                });
+                
+                if (authError) throw authError;
+                
+                // Создаём профиль через RPC функцию (более безопасный способ)
+                const { error: profileError } = await supabase.rpc('create_user_profile', {
+                    p_user_id: authData.user.id,
+                    p_email: email,
+                    p_full_name: fullName,
+                    p_city: city
+                });
+                
+                if (profileError) {
+                    console.error('Ошибка создания профиля:', profileError);
+                    // Не блокируем регистрацию если профиль не создался
+                    // Он создастся триггером или можно создать позже
+                }
+                
+                const successDiv = document.getElementById('authSuccess');
+                successDiv.textContent = '✅ Регистрация успешна! Можете войти в систему.';
+                successDiv.style.display = 'block';
+                
+                // Автоматически переключаемся на вход через 2 секунды
+                setTimeout(() => {
+                    switchAuthTab('login');
+                    // Заполняем email
+                    document.querySelector('#loginForm input[name="email"]').value = email;
+                }, 2000);
+            } catch (error) {
+                console.error('Ошибка регистрации:', error);
+                const errorDiv = document.getElementById('authError');
+                let errorMessage = error.message || 'Ошибка регистрации';
+                
+                // Более понятные сообщения об ошибках
+                if (errorMessage.includes('already registered')) {
+                    errorMessage = 'Этот email уже зарегистрирован';
+                } else if (errorMessage.includes('invalid email')) {
+                    errorMessage = 'Неверный формат email';
+                } else if (errorMessage.includes('password')) {
+                    errorMessage = 'Пароль должен быть минимум 6 символов';
+                }
+                
+                errorDiv.textContent = '❌ ' + errorMessage;
+                errorDiv.style.display = 'block';
+            }
+            
+            showLoading(false);
+        }
+        
+        async function logout() {
+            if (!supabase) return;
+            
+            try {
+                await supabase.auth.signOut();
+                currentUser = null;
+                userRole = null;
+                updateUIForGuest();
+                alert('✅ Вы вышли из системы');
+            } catch (error) {
+                console.error('Ошибка выхода:', error);
+            }
+        }
+        
+        async function openAdminPanel() {
+            if (!currentUser || (userRole !== 'admin' && userRole !== 'moderator')) {
+                alert('⚠️ У вас нет прав доступа');
+                return;
+            }
+            
+            document.getElementById('adminModal').classList.add('active');
+            await loadPendingDeeds();
+        }
+        
+        function closeAdminPanel() {
+            document.getElementById('adminModal').classList.remove('active');
+        }
+        
+        function switchAdminTab(tab) {
+            const tabs = document.querySelectorAll('.admin-tab');
+            const contents = document.querySelectorAll('.admin-content');
+            
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => c.classList.remove('active'));
+            
+            if (tab === 'pending') {
+                tabs[0].classList.add('active');
+                document.getElementById('pendingContent').classList.add('active');
+                loadPendingDeeds();
+            } else {
+                tabs[1].classList.add('active');
+                document.getElementById('allContent').classList.add('active');
+                loadAllDeeds();
+            }
+        }
+        
+        async function loadAllDeeds() {
+            showLoading(true);
+            try {
+                const { data, error } = await supabase.rpc('get_deeds_with_coordinates', {
+                    status_filter: ['approved', 'active', 'completed']
+                });
+                
+                if (error) throw error;
+                
+                const container = document.getElementById('allDeeds');
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">Нет дел на карте</p>';
+                    showLoading(false);
+                    return;
+                }
+                
+                container.innerHTML = data.map(deed => {
+                    const cat = categories[deed.category];
+                    return `
+                        <div class="deed-item">
+                            <div style="display: flex; gap: 16px; align-items: start;">
+                                <div style="font-size: 48px;">${cat.icon}</div>
+                                <div style="flex: 1;">
+                                    <h4 style="margin-bottom: 8px;">${deed.title}</h4>
+                                    <p style="font-size: 14px; color: #666; margin-bottom: 8px;">${deed.description}</p>
+                                    <p style="font-size: 13px; color: #999;">📍 ${deed.address}</p>
+                                    <p style="font-size: 13px; color: #999;">👤 ${deed.contact_name} • 📞 ${deed.contact_phone}</p>
+                                    <p style="font-size: 13px; color: #999;">👥 ${deed.volunteers_registered || 0} / ${deed.volunteers_needed}</p>
+                                    <p style="font-size: 13px; color: #999;">📊 Статус: <strong>${getStatusText(deed.status)}</strong></p>
+                                </div>
+                                <div class="deed-actions">
+                                    <button onclick="openEditDeed('${deed.id}')" class="btn" style="background: #3498DB; color: white;">✏️ Редактировать</button>
+                                    <button onclick="deleteDeedConfirm('${deed.id}')" class="btn" style="background: #e74c3c; color: white;">🗑️ Удалить</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Ошибка загрузки дел:', error);
+                alert('❌ Ошибка загрузки: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        function getStatusText(status) {
+            const statuses = {
+                'pending': 'В ожидании',
+                'approved': 'Одобрено',
+                'active': 'Активно',
+                'completed': 'Завершено',
+                'rejected': 'Отклонено'
+            };
+            return statuses[status] || status;
+        }
+        
+        async function loadPendingDeeds() {
+            showLoading(true);
+            try {
+                const { data, error } = await supabase.rpc('get_deeds_with_coordinates', {
+                    status_filter: ['pending']
+                });
+                
+                if (error) throw error;
+                
+                const container = document.getElementById('pendingDeeds');
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">Нет дел на модерации</p>';
+                    showLoading(false);
+                    return;
+                }
+                
+                container.innerHTML = data.map(deed => {
+                    const cat = categories[deed.category];
+                    return `
+                        <div style="border: 2px solid #e0e0e0; border-radius: 16px; padding: 16px; margin-bottom: 16px;">
+                            <div style="display: flex; gap: 16px; align-items: start;">
+                                <div style="font-size: 48px;">${cat.icon}</div>
+                                <div style="flex: 1;">
+                                    <h4 style="margin-bottom: 8px;">${deed.title}</h4>
+                                    <p style="font-size: 14px; color: #666; margin-bottom: 8px;">${deed.description}</p>
+                                    <p style="font-size: 13px; color: #999;">📍 ${deed.address}</p>
+                                    <p style="font-size: 13px; color: #999;">👤 ${deed.contact_name} • 📞 ${deed.contact_phone}</p>
+                                    <p style="font-size: 13px; color: #999;">👥 Нужно: ${deed.volunteers_needed}</p>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 8px;">
+                                    <button onclick="approveDeed('${deed.id}')" class="btn" style="background: #2ECC71; color: white; padding: 8px 16px;">✓ Одобрить</button>
+                                    <button onclick="rejectDeed('${deed.id}')" class="btn" style="background: #e74c3c; color: white; padding: 8px 16px;">✗ Отклонить</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Ошибка загрузки дел на модерации:', error);
+                alert('❌ Ошибка загрузки: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        async function approveDeed(deedId) {
+            if (!confirm('Одобрить это дело?')) return;
+            
+            showLoading(true);
+            try {
+                // Используем RPC функцию вместо прямого UPDATE
+                const { data, error } = await supabase.rpc('approve_deed', {
+                    p_deed_id: deedId
+                });
+                
+                if (error) throw error;
+                
+                alert('✅ Дело одобрено!');
+                await loadPendingDeeds();
+                await loadDeeds();
+            } catch (error) {
+                console.error('Ошибка одобрения:', error);
+                alert('❌ Ошибка: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        async function rejectDeed(deedId) {
+            if (!confirm('Отклонить это дело?')) return;
+            
+            showLoading(true);
+            try {
+                // Используем RPC функцию вместо прямого UPDATE
+                const { data, error } = await supabase.rpc('reject_deed', {
+                    p_deed_id: deedId
+                });
+                
+                if (error) throw error;
+                
+                alert('✅ Дело отклонено');
+                await loadPendingDeeds();
+            } catch (error) {
+                console.error('Ошибка отклонения:', error);
+                alert('❌ Ошибка: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        async function openEditDeed(deedId) {
+            showLoading(true);
+            try {
+                // Получаем данные дела
+                const { data, error } = await supabase.rpc('get_deeds_with_coordinates', {
+                    status_filter: ['pending', 'approved', 'active', 'completed', 'rejected']
+                });
+                
+                if (error) throw error;
+                
+                const deed = data.find(d => d.id === deedId);
+                if (!deed) {
+                    alert('❌ Дело не найдено');
+                    showLoading(false);
+                    return;
+                }
+                
+                // Заполняем форму
+                document.getElementById('editDeedId').value = deed.id;
+                document.getElementById('editTitle').value = deed.title;
+                document.getElementById('editDescription').value = deed.description;
+                document.getElementById('editCategory').value = deed.category;
+                document.getElementById('editAddress').value = deed.address;
+                document.getElementById('editContactName').value = deed.contact_name;
+                document.getElementById('editContactPhone').value = deed.contact_phone;
+                document.getElementById('editVolunteersNeeded').value = deed.volunteers_needed;
+                document.getElementById('editStatus').value = deed.status;
+                
+                // Открываем модальное окно
+                document.getElementById('editDeedModal').classList.add('active');
+            } catch (error) {
+                console.error('Ошибка загрузки дела:', error);
+                alert('❌ Ошибка: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        function closeEditDeedModal() {
+            document.getElementById('editDeedModal').classList.remove('active');
+            document.getElementById('editDeedForm').reset();
+        }
+        
+        async function updateDeed(e) {
+            e.preventDefault();
+            showLoading(true);
+            
+            const formData = new FormData(e.target);
+            const deedId = formData.get('deedId');
+            
+            try {
+                const { error } = await supabase.rpc('update_deed', {
+                    p_deed_id: deedId,
+                    p_title: formData.get('title'),
+                    p_description: formData.get('description'),
+                    p_category: formData.get('category'),
+                    p_address: formData.get('address'),
+                    p_contact_name: formData.get('contactName'),
+                    p_contact_phone: formData.get('contactPhone'),
+                    p_volunteers_needed: parseInt(formData.get('volunteersNeeded')),
+                    p_status: formData.get('status')
+                });
+                
+                if (error) throw error;
+                
+                alert('✅ Дело обновлено!');
+                closeEditDeedModal();
+                await loadAllDeeds();
+                await loadDeeds();
+            } catch (error) {
+                console.error('Ошибка обновления:', error);
+                alert('❌ Ошибка: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        async function deleteDeedConfirm(deedId) {
+            if (!confirm('Вы уверены что хотите удалить это дело? Это действие нельзя отменить!')) return;
+            
+            showLoading(true);
+            try {
+                const { error } = await supabase.rpc('delete_deed', {
+                    p_deed_id: deedId
+                });
+                
+                if (error) throw error;
+                
+                alert('✅ Дело удалено');
+                await loadAllDeeds();
+                await loadDeeds();
+            } catch (error) {
+                console.error('Ошибка удаления:', error);
+                alert('❌ Ошибка: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        async function volunteerForDeed(deedId) {
+            if (!currentUser) {
+                alert('⚠️ Для отклика необходимо войти в систему');
+                openAuthModal();
+                return;
+            }
+            
+            showLoading(true);
+            try {
+                const { data, error } = await supabase.rpc('volunteer_for_deed', {
+                    p_deed_id: deedId
+                });
+                
+                if (error) throw error;
+                
+                const result = data[0];
+                if (result.success) {
+                    // Показываем контактную информацию
+                    const contactInfo = `✅ ${result.message}\n\n📞 Контактная информация:\nИмя: ${result.contact_name}\nТелефон: ${result.contact_phone}${result.contact_email ? `\nEmail: ${result.contact_email}` : ''}`;
+                    alert(contactInfo);
+                    
+                    // Обновляем карту
+                    await loadDeeds();
+                } else {
+                    alert('⚠️ ' + result.message);
+                }
+            } catch (error) {
+                console.error('Ошибка отклика:', error);
+                alert('❌ Ошибка: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        async function openProfileModal() {
+            if (!currentUser) {
+                alert('⚠️ Необходима авторизация');
+                return;
+            }
+            
+            document.getElementById('profileModal').classList.add('active');
+            await loadMyDeeds();
+        }
+        
+        function closeProfileModal() {
+            document.getElementById('profileModal').classList.remove('active');
+        }
+        
+        async function loadMyDeeds() {
+            showLoading(true);
+            try {
+                const { data, error } = await supabase.rpc('get_my_volunteered_deeds');
+                
+                if (error) throw error;
+                
+                const container = document.getElementById('myDeeds');
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; padding: 60px 20px; color: #666;"><div style="font-size: 64px; margin-bottom: 16px;">🙋</div><p style="font-size: 18px; margin-bottom: 8px;">У вас пока нет откликов</p><p style="font-size: 14px;">Найдите доброе дело на карте и откликнитесь!</p></div>';
+                    showLoading(false);
+                    return;
+                }
+                
+                container.innerHTML = data.map(deed => {
+                    const cat = categories[deed.category];
+                    const deadlineText = deed.deadline ? `<p style="font-size: 13px; color: #666;">📅 До: ${new Date(deed.deadline).toLocaleDateString('ru-RU')}</p>` : '';
+                    const statusColors = {'approved': '#2ECC71', 'active': '#3498DB', 'completed': '#95a5a6'};
+                    const statusColor = statusColors[deed.status] || '#95a5a6';
+                    
+                    return `
+                        <div class="deed-item">
+                            <div style="display: flex; gap: 16px; align-items: start;">
+                                <div style="font-size: 48px;">${cat.icon}</div>
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                        <h4 style="margin: 0;">${deed.title}</h4>
+                                        <span style="background: ${statusColor}; color: white; padding: 2px 8px; border-radius: 8px; font-size: 11px;">${getStatusText(deed.status)}</span>
+                                    </div>
+                                    <p style="font-size: 14px; color: #666; margin-bottom: 8px;">${deed.description}</p>
+                                    <p style="font-size: 13px; color: #999;">📍 ${deed.address}</p>
+                                    ${deadlineText}
+                                    <p style="font-size: 13px; color: #999;">👥 ${deed.volunteers_registered} / ${deed.volunteers_needed} волонтёров</p>
+                                    <p style="font-size: 13px; color: #999;">🕐 Откликнулись: ${new Date(deed.volunteered_at).toLocaleDateString('ru-RU')}</p>
+                                    
+                                    <div style="margin-top: 12px; padding: 12px; background: #f8f9fa; border-radius: 12px; border-left: 4px solid #2ECC71;">
+                                        <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">📞 Контактная информация:</p>
+                                        <p style="font-size: 13px; color: #666;">👤 ${deed.contact_name}</p>
+                                        <p style="font-size: 13px; color: #666;">📞 <a href="tel:${deed.contact_phone}" style="color: #2ECC71; text-decoration: none;">${deed.contact_phone}</a></p>
+                                        ${deed.contact_email ? `<p style="font-size: 13px; color: #666;">📧 <a href="mailto:${deed.contact_email}" style="color: #2ECC71; text-decoration: none;">${deed.contact_email}</a></p>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Ошибка загрузки дел:', error);
+                alert('❌ Ошибка загрузки: ' + error.message);
+            }
+            showLoading(false);
+        }
+        
+        function closeModal() { document.getElementById('modal').classList.remove('active'); document.getElementById('deedForm').reset(); resetLocation(); }
+        
+        function resetLocation() {
+            selectedLocation = { lat: null, lng: null };
+            document.getElementById('selectedLat').value = '';
+            document.getElementById('selectedLng').value = '';
+            document.getElementById('locationBtnText').textContent = '📍 Выбрать на карте';
+            document.getElementById('pickLocationBtn').classList.remove('selected');
+            document.getElementById('coordsDisplay').style.display = 'none';
+        }
+        
+        function openMapPicker() {
+            document.getElementById('mapPickerOverlay').classList.add('active');
+            setTimeout(() => {
+                if (!pickerMap) {
+                    pickerMap = L.map('mapPicker').setView([53.9045, 27.5615], 12);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap'
+                    }).addTo(pickerMap);
+                    
+                    // Обновляем координаты при движении карты
+                    pickerMap.on('move', updatePickerCoords);
+                    pickerMap.on('moveend', updatePickerCoords);
+                } else {
+                    pickerMap.invalidateSize();
+                }
+                updatePickerCoords();
+            }, 100);
+        }
+        
+        function closeMapPicker() {
+            document.getElementById('mapPickerOverlay').classList.remove('active');
+        }
+        
+        function updatePickerCoords() {
+            if (!pickerMap) return;
+            const center = pickerMap.getCenter();
+            selectedLocation.lat = center.lat.toFixed(6);
+            selectedLocation.lng = center.lng.toFixed(6);
+            document.getElementById('pickerCoords').innerHTML = `
+                <strong>Координаты:</strong><br>
+                Широта: ${selectedLocation.lat}, Долгота: ${selectedLocation.lng}
+            `;
+        }
+        
+        function confirmLocation() {
+            if (!selectedLocation.lat || !selectedLocation.lng) return;
+            
+            // Сохраняем координаты в форму
+            document.getElementById('selectedLat').value = selectedLocation.lat;
+            document.getElementById('selectedLng').value = selectedLocation.lng;
+            
+            // Обновляем кнопку
+            document.getElementById('locationBtnText').textContent = '✓ Место выбрано';
+            document.getElementById('pickLocationBtn').classList.add('selected');
+            
+            // Показываем координаты
+            document.getElementById('coordsDisplay').textContent = 
+                `📍 ${selectedLocation.lat}, ${selectedLocation.lng}`;
+            document.getElementById('coordsDisplay').style.display = 'inline-block';
+            
+            // Пытаемся получить адрес через обратное геокодирование
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${selectedLocation.lat}&lon=${selectedLocation.lng}&accept-language=ru`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.display_name) {
+                        document.getElementById('addressInput').value = data.display_name;
+                    }
+                })
+                .catch(e => console.log('Геокодирование недоступно'));
+            
+            closeMapPicker();
+        }
+        async function submitDeed(e) {
+            e.preventDefault();
+            
+            // Проверяем, выбрано ли местоположение
+            const lat = parseFloat(document.getElementById('selectedLat').value);
+            const lng = parseFloat(document.getElementById('selectedLng').value);
+            
+            if (!lat || !lng) {
+                alert('⚠️ Пожалуйста, выберите место на карте');
+                return;
+            }
+            
+            showLoading(true);
+            const formData = new FormData(e.target);
+            
+            try {
+                if (supabase) {
+                    const deadline = formData.get('deadline');
+                    
+                    // Используем RPC функцию для правильного сохранения координат
+                    const { data, error } = await supabase.rpc('create_deed', {
+                        p_title: formData.get('title'),
+                        p_description: formData.get('description'),
+                        p_category: formData.get('category'),
+                        p_address: formData.get('address'),
+                        p_city: 'Минск',
+                        p_contact_name: formData.get('contactName'),
+                        p_contact_phone: formData.get('contactPhone'),
+                        p_contact_email: null,
+                        p_volunteers_needed: parseInt(formData.get('volunteersNeeded')),
+                        p_deadline: deadline ? new Date(deadline).toISOString() : null,
+                        p_images: [],
+                        p_lat: lat,
+                        p_lng: lng
+                    });
+                    
+                    if (error) throw error;
+                    
+                    console.log('Дело создано с ID:', data);
+                    alert('✅ Заявка отправлена на модерацию!\n\nКоординаты: ' + lat.toFixed(6) + ', ' + lng.toFixed(6));
+                    closeModal();
+                    await loadDeeds();
+                } else { 
+                    alert('⚠️ Supabase не настроен. Выполните SQL скрипт из setup_database.sql'); 
+                }
+            } catch (error) { 
+                console.error('Ошибка:', error); 
+                alert('❌ Ошибка: ' + error.message); 
+            }
+            showLoading(false);
+        }
+        function showLoading(show) { document.getElementById('loading').classList.toggle('hidden', !show); }
+        
+        function toggleFilters() {
+            const panel = document.getElementById('filterPanel');
+            const toggle = document.getElementById('filterToggle');
+            panel.classList.toggle('open');
+            toggle.textContent = panel.classList.contains('open') ? '🔼' : '🔽';
+        }
+        
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
